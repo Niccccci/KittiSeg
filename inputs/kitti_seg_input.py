@@ -147,30 +147,33 @@ def _make_data_gen(hypes, phase, data_dir):
 
     data_file = os.path.join(data_dir, data_file)
 
-    road_color = np.array(hypes['data']['road_color'])
-    background_color = np.array(hypes['data']['background_color'])
+    num_classes = hypes['arch']['num_classes']
+
+    colors = []
+    for key in hypes['colors']:
+        colors.append(np.array(hypes['colors'][key]))
 
     data = _load_gt_file(hypes, data_file)
 
     for image, gt_image in data:
 
-        gt_bg = np.all(gt_image == background_color, axis=2)
-        gt_road = np.all(gt_image == road_color, axis=2)
+        shape = gt_image.shape
 
-        assert(gt_road.shape == gt_bg.shape)
-        shape = gt_bg.shape
-        gt_bg = gt_bg.reshape(shape[0], shape[1], 1)
-        gt_road = gt_road.reshape(shape[0], shape[1], 1)
+        gt = np.all(gt_image == colors[0], axis=2).reshape(shape[0], shape[1], 1)
 
-        gt_image = np.concatenate((gt_bg, gt_road), axis=2)
+        for i in range(1,len(colors)) :
+
+            new_gt = np.all(gt_image == colors[i], axis=2).reshape(shape[0], shape[1], 1)
+
+            gt = np.concatenate((gt, new_gt), axis=2)
 
         if phase == 'val':
-            yield image, gt_image
+            yield image, gt
         elif phase == 'train':
 
-            yield jitter_input(hypes, image, gt_image)
+            yield jitter_input(hypes, image, gt)
 
-            yield jitter_input(hypes, np.fliplr(image), np.fliplr(gt_image))
+            yield jitter_input(hypes, np.fliplr(image), np.fliplr(gt))
 
 
 def jitter_input(hypes, image, gt_image):

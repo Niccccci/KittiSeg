@@ -23,15 +23,26 @@ def eval_image(hypes, gt_image, cnn_image):
     """."""
     thresh = np.array(range(0, 256))/255.0
 
-    road_color = np.array(hypes['data']['road_color'])
-    background_color = np.array(hypes['data']['background_color'])
-    gt_road = np.all(gt_image == road_color, axis=2)
-    gt_bg = np.all(gt_image == background_color, axis=2)
-    valid_gt = gt_road + gt_bg
+    FN,FP = np.zeros(thresh.shape),np.zeros(thresh.shape)
+    posNum, negNum = 0,0
 
-    FN, FP, posNum, negNum = seg.evalExp(gt_road, cnn_image,
-                                         thresh, validMap=None,
-                                         validArea=valid_gt)
+    colors = []
+    for key in hypes['colors']:
+        colors.append(np.array(hypes['colors'][key]))
+
+    valid_gt = np.all(gt_image == colors[0], axis=2)
+    for i in range(1,len(colors)) :
+        valid_gt = valid_gt + np.all(gt_image == colors[i], axis=2)
+
+    for i in range(len(colors)) :
+        N, P, pos, neg = seg.evalExp(np.all(gt_image == colors[i], axis=2),
+                                             cnn_image,
+                                             thresh, validMap=None,
+                                             validArea=valid_gt)
+        FN = np.add(FN,N)
+        FP = np.add(FP,P)
+        posNum+=pos
+        negNum+=neg
 
     return FN, FP, posNum, negNum
 
@@ -50,7 +61,11 @@ def evaluate(hypes, sess, image_pl, inf_out):
 
     softmax = inf_out['softmax']
     data_dir = hypes['dirs']['data_dir']
-
+    num_classes = hypes['arch']['num_classes']
+    colors = hypes['colors']
+    for i,key in enumerate(colors):
+        colors[i] = np.array(colors[key])
+        del colors[key]
     eval_dict = {}
     for phase in ['train', 'val']:
         data_file = hypes['data']['{}_file'.format(phase)]
@@ -104,7 +119,8 @@ def evaluate(hypes, sess, image_pl, inf_out):
                     feed_dict = {image_pl: input_image}
 
                     output = sess.run([softmax], feed_dict=feed_dict)
-                    output_im = output[0][:, 1].reshape(shape[0], shape[1])
+                    output_im = output.reshape(shape[0], shape[1],num_classes)
+                    output_im = np.argmax(output_im,axis=2)
 
                     if hypes['jitter']['fix_shape']:
                         gt_shape = gt_image.shape
@@ -112,16 +128,16 @@ def evaluate(hypes, sess, image_pl, inf_out):
                                               offset_y:offset_y+gt_shape[1]]
 
                     if phase == 'val':
-                        # Saving RB Plot
-                        ov_image = seg.make_overlay(image, output_im)
+
+                        green_image = seg.paint(output_im,colors)
                         name = os.path.basename(image_file)
-                        image_list.append((name, ov_image))
+                        image_list.append((name, green_image))
 
-                        name2 = name.split('.')[0] + '_green.png'
+                        name2 = name.split('.')[0] + '_overlay.png'
 
-                        hard = output_im > 0.5
-                        green_image = utils.fast_overlay(image, hard)
-                        image_list.append((name2, green_image))
+                        ov_image = seg.blend_transparent(image,green_image)
+                        image_list.append((name2, ov_image))
+
 
                     FN, FP, posNum, negNum = eval_image(hypes,
                                                         gt_image, output_im)

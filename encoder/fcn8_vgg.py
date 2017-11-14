@@ -29,13 +29,14 @@ def inference(hypes, images, train=True):
     Returns:
       softmax_linear: Output tensor with the computed logits.
     """
+    num_classes = hypes['arch']['num_classes']
     vgg16_npy_path = os.path.join(hypes['dirs']['data_dir'], 'weights',
                                   "vgg16.npy")
     vgg_fcn = fcn8_vgg.FCN8VGG(vgg16_npy_path=vgg16_npy_path)
 
     vgg_fcn.wd = hypes['wd']
 
-    vgg_fcn.build(images, train=train, num_classes=2, random_init_fc8=True)
+    vgg_fcn.build(images, train=train, num_classes=num_classes, random_init_fc8=True)
 
     logits = {}
 
